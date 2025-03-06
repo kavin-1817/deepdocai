@@ -1,12 +1,11 @@
-streamlit
-PyPDF2
-pdfplumber
-python-docx
-openpyxl
-langchain
-langchain-google-genai
-langchain-community
-python-dotenv
-google-generativeai
-faiss-cpu
-streamlit-voice-input
+streamlit==1.32.0
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+python-docx==0.8.11
+openpyxl==3.1.2
+langchain==0.1.0
+langchain-google-genai==0.0.4
+langchain-community==0.0.11
+google-generativeai==0.3.2
+python-dotenv==1.0.0
+voice-input==0.1.0  # Replace with the correct package name for the voice_input component
