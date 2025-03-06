@@ -1,4 +1,3 @@
-# deepdocai
 streamlit
 PyPDF2
 pdfplumber
@@ -12,3 +11,4 @@ pdf2image
 pytesseract
 SpeechRecognition
 google-generativeai
+faiss-cpu
