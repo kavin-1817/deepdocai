@@ -13,17 +13,12 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
-from langchain.schema import HumanMessage, SystemMessage
 from dotenv import load_dotenv
-from pdf2image import convert_from_path
-import pytesseract
-from concurrent.futures import ThreadPoolExecutor
-import speech_recognition as sr
-import google.generativeai as genai
+import logging
 
-# Tesseract path configuration for Windows
-if os.name == 'nt':
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\tesseract\tesseract.exe'
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Set up Streamlit page
 st.set_page_config(page_title="DeepDocAI", page_icon="🤖", layout="wide")
@@ -31,21 +26,22 @@ st.set_page_config(page_title="DeepDocAI", page_icon="🤖", layout="wide")
 # Load environment variables
 try:
     load_dotenv()
+    import google.generativeai as genai
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 except Exception as e:
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS with updated pagination and message styling, removing scrollbar and extra space
+# Custom CSS (unchanged from your original)
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
     .chat-bubble {
-        background-color: #DCF8C6; /* User bubble */
+        background-color: #DCF8C6;
         color: black;
         padding: 12px;
         border-radius: 12px;
         max-width: 80%;
-        margin: 0px !important; /* Remove any margin */
+        margin: 0px !important;
         display: inline-block;
         font-size: 18px;
         line-height: 1.4;
@@ -53,15 +49,15 @@ st.markdown("""
         animation: fadeIn 0.5s ease-in-out;
     }
     .ai-bubble {
-        background-color: #ECECEC; /* AI bubble */
+        background-color: #ECECEC;
         color: black;
         padding: 12px;
         border-radius: 12px;
         max-width: 80%;
-        margin: 0px !important; /* Remove any margin */
+        margin: 0px !important;
         display: inline-block;
         font-size: 18px;
-        line-height: 1.6; /* Improved line spacing for readability */
+        line-height: 1.6;
         box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
         animation: fadeIn 0.5s ease-in-out;
     }
@@ -94,22 +90,22 @@ st.markdown("""
         to { opacity: 1; transform: translateX(0); }
     }
     .message-container {
-        text-align: left; /* Align both messages to the left */
+        text-align: left;
         width: 100%;
-        max-width: 800px; /* Adjusted width to match your reference */
-        margin: 0px !important; /* Remove any margin */
-        padding: 0px !important; /* Remove any padding */
-        overflow: hidden; /* Prevent scrolling */
+        max-width: 800px;
+        margin: 0px !important;
+        padding: 0px !important;
+        overflow: hidden;
     }
     .pagination-container {
         min-height: 400px;
         display: flex;
         flex-direction: column;
-        justify-content: flex-start; /* Keeps content at the very top */
-        align-items: center; /* Centers the message container horizontally */
-        padding: 0px !important; /* Remove any default padding at the top */
-        margin: 0px !important; /* Remove any default margin at the top */
-        overflow: hidden; /* Prevent scrolling in the container */
+        justify-content: flex-start;
+        align-items: center;
+        padding: 0px !important;
+        margin: 0px !important;
+        overflow: hidden;
     }
     .nav-buttons {
         display: flex;
@@ -117,7 +113,7 @@ st.markdown("""
         align-items: center;
         margin-top: 20px;
         width: 100%;
-        max-width: 800px; /* Match message width */
+        max-width: 800px;
     }
     .nav-button {
         background-color: #4CAF50;
@@ -134,7 +130,7 @@ st.markdown("""
         background-color: #cccccc;
         cursor: not-allowed;
     }
-    .stChatMessage { display: none !important; } /* Hide Streamlit's default chat message indicators */
+    .stChatMessage { display: none !important; }
     .sidebar-input-container {
         background-color: #fff;
         border: 1px solid #ddd;
@@ -183,18 +179,11 @@ st.markdown("""
         font-size: 16px !important;
         color: #4CAF50 !important;
     }
-    .stApp { margin: 0px !important; padding: 0px !important; } /* Remove any Streamlit default margins/padding */
+    .stApp { margin: 0px !important; padding: 0px !important; }
     </style>
 """, unsafe_allow_html=True)
 
 # File Processing Functions
-def extract_text_from_image(image):
-    try:
-        return pytesseract.image_to_string(image, lang='tam')
-    except Exception as e:
-        st.error(f"Error in OCR: {str(e)}")
-        return ""
-
 def extract_tables_from_pdf(pdf_path):
     tables_text = ""
     try:
@@ -209,16 +198,19 @@ def extract_tables_from_pdf(pdf_path):
                             tables_text += "| " + " | ".join(str(cell) for cell in row) + " |\n"
                         tables_text += "\n"
     except Exception as e:
+        logger.error(f"Error extracting tables from PDF: {str(e)}")
         st.error(f"Error extracting tables from PDF: {str(e)}")
     return tables_text
 
 def process_pdf(pdf):
+    logger.info("Starting PDF processing")
     text = ""
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(pdf.getbuffer())
             temp_path = temp_file.name
+        logger.info("PDF temp file created: %s", temp_path)
 
         pdf_reader = PdfReader(temp_path)
         for page in pdf_reader.pages:
@@ -226,23 +218,27 @@ def process_pdf(pdf):
             if extracted_text:
                 text += extracted_text + "\n\n"
 
-        images = convert_from_path(temp_path)
-        for image in images:
-            image_text = extract_text_from_image(image)
-            if image_text.strip():
-                text += "**Extracted Text from Image:**\n" + image_text + "\n\n"
+        # Temporarily disable OCR and image processing for Streamlit Cloud compatibility
+        # images = convert_from_path(temp_path)
+        # for image in images:
+        #     image_text = extract_text_from_image(image)
+        #     if image_text.strip():
+        #         text += "**Extracted Text from Image:**\n" + image_text + "\n\n"
 
         tables_text = extract_tables_from_pdf(temp_path)
         if tables_text.strip():
             text += "**Extracted Tables:**\n" + tables_text + "\n\n"
     except Exception as e:
+        logger.error(f"Error processing PDF: {str(e)}")
         st.error(f"Error processing PDF: {str(e)}")
     finally:
-        if os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+    logger.info("PDF processing completed")
     return text
 
 def process_docx(docx):
+    logger.info("Starting DOCX processing")
     text = ""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as temp_file:
@@ -252,7 +248,6 @@ def process_docx(docx):
             for para in doc.paragraphs:
                 if para.text.strip():
                     text += para.text + "\n\n"
-            # Extract tables from Word document
             for table in doc.tables:
                 table_text = ""
                 for row in table.rows:
@@ -262,10 +257,12 @@ def process_docx(docx):
                     text += "**Extracted Table from Word:**\n" + table_text + "\n\n"
             os.remove(temp_path)
     except Exception as e:
+        logger.error(f"Error processing Word file: {str(e)}")
         st.error(f"Error processing Word file: {str(e)}")
     return text
 
 def process_xlsx(xlsx):
+    logger.info("Starting XLSX processing")
     text = ""
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as temp_file:
@@ -282,14 +279,17 @@ def process_xlsx(xlsx):
                 text += "\n"
             os.remove(temp_path)
     except Exception as e:
+        logger.error(f"Error processing Excel file: {str(e)}")
         st.error(f"Error processing Excel file: {str(e)}")
     return text
 
 def get_file_text(docs):
+    logger.info("Extracting text from files")
     text = ""
     if not docs:
         return text
     try:
+        from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = []
             for doc in docs:
@@ -302,7 +302,9 @@ def get_file_text(docs):
             for future in futures:
                 text += future.result() + "\n"
     except Exception as e:
+        logger.error(f"Processing failed: {str(e)}")
         st.error(f"Processing failed: {str(e)}")
+    logger.info("Text extraction completed: %d characters", len(text))
     return text
 
 def get_text_chunks(text):
@@ -310,19 +312,23 @@ def get_text_chunks(text):
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=5000, chunk_overlap=500)
         return text_splitter.split_text(text)
     except Exception as e:
+        logger.error(f"Error splitting text: {str(e)}")
         st.error(f"Error splitting text: {str(e)}")
         return []
 
 def get_vector_store(text_chunks):
     if not text_chunks:
+        logger.error("No text found in the uploaded files")
         st.error("❌ No text found in the uploaded files.")
         return False
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
         vector_store.save_local("faiss_index")
+        logger.info("Vector store created successfully")
         return True
     except Exception as e:
+        logger.error(f"Error in vector storage: {str(e)}")
         st.error(f"⚠️ Error in vector storage: {e}")
         return False
 
@@ -357,17 +363,15 @@ def get_conversational_chain():
     return load_qa_chain(model, chain_type="stuff", prompt=prompt)
 
 def format_response(response_text):
-    # Improved formatting to ensure bullet points, proper line breaks, and clean structure
-    formatted_text = re.sub(r'-\n', '', response_text)  # Remove hyphens used for word continuation
-    formatted_text = re.sub(r'^\s*\*+\s+', '• ', formatted_text, flags=re.MULTILINE)  # Normalize asterisks to bullets
-    formatted_text = formatted_text.replace("\n-", "\n\n• ")  # Convert hyphens to bullet points with new lines
-    formatted_text = formatted_text.replace("-", " - ")  # Add space around remaining hyphens for readability
-    formatted_text = re.sub(r'\n\s*\n+', '\n\n', formatted_text)  # Clean up excessive newlines
+    formatted_text = re.sub(r'-\n', '', response_text)
+    formatted_text = re.sub(r'^\s*\*+\s+', '• ', formatted_text, flags=re.MULTILINE)
+    formatted_text = formatted_text.replace("\n-", "\n\n• ")
+    formatted_text = formatted_text.replace("-", " - ")
+    formatted_text = re.sub(r'\n\s*\n+', '\n\n', formatted_text)
     formatted_text = "\n\n".join([line.strip() for line in formatted_text.split("\n") if line.strip()])
     return formatted_text
 
 def display_response(response_text, chat_placeholder):
-    # Display the entire response at once, formatted with bullet points and line breaks
     formatted_text = format_response(response_text)
     with chat_placeholder:
         st.markdown(
@@ -382,7 +386,6 @@ def user_input(user_question, chat_placeholder):
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
 
-    # Display user question in chat UI without Streamlit's default chat message
     with chat_placeholder:
         st.markdown(
             f'<div class="message-container"><div class="chat-bubble user-response">🧑‍💼 You: {user_question}</div></div>',
@@ -394,16 +397,13 @@ def user_input(user_question, chat_placeholder):
         return_only_outputs=True
     )
 
-    # Get the formatted response
     response_text = format_response(response["output_text"])
-    
-    # Only add the response if it's not already in the conversation to prevent repetition
     if not any(msg["content"] == response_text for msg in st.session_state.conversation if msg["role"] == "ai"):
         display_response(response_text, chat_placeholder)
         st.session_state.conversation.append({"role": "ai", "content": response_text})
 
 def main():
-    # Initialize session state
+    logger.info("App started")
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
     if "current_page" not in st.session_state:
@@ -412,15 +412,10 @@ def main():
         st.session_state.processed = False
     if "docs" not in st.session_state:
         st.session_state.docs = []
-    if "listening" not in st.session_state:
-        st.session_state.listening = False
 
-    # Chat container at the top
     chat_placeholder = st.container()
-    
-    # Only display messages if there are any, no "No conversation yet" message
+
     if st.session_state.conversation:
-        # Group messages into pairs (user + ai)
         message_pairs = []
         for i in range(0, len(st.session_state.conversation), 2):
             pair = [st.session_state.conversation[i]]
@@ -432,7 +427,6 @@ def main():
         current_page = st.session_state.current_page
         
         if total_pages > 0:
-            # Display current page messages at the very top, left-aligned
             with chat_placeholder:
                 st.markdown('<div class="message-container">', unsafe_allow_html=True)
                 for message in message_pairs[current_page]:
@@ -448,10 +442,9 @@ def main():
                         )
                 st.markdown('</div>', unsafe_allow_html=True)
             
-            # Navigation buttons below the conversation
             with chat_placeholder:
                 st.markdown('<div class="nav-buttons">', unsafe_allow_html=True)
-                col1, col2, col3 = st.columns([1, 1, 1])  # Equal width columns for uniform button size
+                col1, col2, col3 = st.columns([1, 1, 1])
                 
                 with col1:
                     if st.button("← Previous", key="prev", disabled=current_page == 0, use_container_width=True):
@@ -459,7 +452,7 @@ def main():
                         st.rerun()
                 
                 with col2:
-                    st.write(f"Page {current_page + 1} of {total_pages}", style={"text-align": "center"})
+                    st.markdown(f"<div style='text-align: center;'>Page {current_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
                 
                 with col3:
                     if st.button("Next →", key="next", disabled=current_page == total_pages - 1, use_container_width=True):
@@ -468,7 +461,6 @@ def main():
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # Sidebar for file upload
     with st.sidebar:
         st.title("🚀 DeepDocAI")
         st.subheader("📂 Upload Documents:")
@@ -480,10 +472,12 @@ def main():
         )
         
         if st.button("📥 Submit & Process", key="submit_button"):
+            logger.info("Submit button clicked")
             if not docs:
                 st.warning("⚠️ Please upload at least one file")
             else:
                 st.session_state.docs = docs
+                logger.info("Processing files")
                 raw_text = get_file_text(docs)
                 if not raw_text.strip():
                     st.error("❌ Failed to extract text from files.")
@@ -492,7 +486,6 @@ def main():
                     if get_vector_store(text_chunks):
                         st.session_state.processed = True
 
-        # Input section with separated voice input
         with st.form(key="input_form", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
             with col1:
@@ -505,53 +498,14 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-        # Separate microphone button
-        mic_button = st.button(
-            f"🎤 {'Listening...' if st.session_state.listening else 'Voice Input'}",
-            key="mic_button",
-            disabled=st.session_state.listening
-        )
-
-    # Process input (text or voice)
     if submit_button and user_question:
-        # Check if the question already exists in the conversation to avoid repetition
         if not any(msg["content"] == user_question for msg in st.session_state.conversation if msg["role"] == "user"):
             st.session_state.conversation.append({"role": "user", "content": user_question})
             user_input(user_question, chat_placeholder)
             st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
             st.rerun()
-    elif mic_button and not st.session_state.listening:
-        st.session_state.listening = True
-        voice_text = get_voice_input()
-        st.session_state.listening = False
-        if voice_text:
-            # Check if the voice input already exists in the conversation to avoid repetition
-            if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
-                st.session_state.conversation.append({"role": "user", "content": voice_text})
-                user_input(voice_text, chat_placeholder)
-                st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
-                st.rerun()
 
-def get_voice_input():
-    try:
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            st.info("🎤 Listening... Speak clearly!")
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
-            st.info("Processing audio...")
-            text = recognizer.recognize_google(audio)
-            st.success(f"Recognized: {text}")
-            return text
-    except sr.UnknownValueError:
-        st.error("Sorry, I couldn’t understand the audio.")
-        return None
-    except sr.RequestError as e:
-        st.error(f"Speech Recognition API error: {e}")
-        return None
-    except Exception as e:
-        st.error(f"Voice input error: {e}")
-        return None
+    logger.info("Main loop completed")
 
 if __name__ == "__main__":
     main()
