@@ -14,6 +14,8 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
+import speech_recognition as sr  # Added for speech recognition
+import google.generativeai as genai
 import logging
 
 # Set up logging
@@ -26,159 +28,51 @@ st.set_page_config(page_title="DeepDocAI", page_icon="🤖", layout="wide")
 # Load environment variables
 try:
     load_dotenv()
-    import google.generativeai as genai
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise ValueError("GOOGLE_API_KEY not found in environment variables")
+    genai.configure(api_key=api_key)
 except Exception as e:
+    logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS (unchanged from your original)
+# Custom CSS (unchanged)
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
     .chat-bubble {
-        background-color: #DCF8C6;
-        color: black;
-        padding: 12px;
-        border-radius: 12px;
-        max-width: 80%;
-        margin: 0px !important;
-        display: inline-block;
-        font-size: 18px;
-        line-height: 1.4;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-        animation: fadeIn 0.5s ease-in-out;
+        background-color: #DCF8C6; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
+        margin: 0px !important; display: inline-block; font-size: 18px; line-height: 1.4;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out;
     }
     .ai-bubble {
-        background-color: #ECECEC;
-        color: black;
-        padding: 12px;
-        border-radius: 12px;
-        max-width: 80%;
-        margin: 0px !important;
-        display: inline-block;
-        font-size: 18px;
-        line-height: 1.6;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-        animation: fadeIn 0.5s ease-in-out;
+        background-color: #ECECEC; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
+        margin: 0px !important; display: inline-block; font-size: 18px; line-height: 1.6;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out;
     }
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    .typing {
-        font-size: 14px;
-        color: #888;
-        animation: blink 1.5s infinite;
-    }
-    @keyframes blink {
-        0% { opacity: 0.2; }
-        50% { opacity: 1; }
-        100% { opacity: 0.2; }
-    }
-    .ai-response {
-        animation: slideIn 0.5s ease-in-out;
-    }
-    @keyframes slideIn {
-        from { opacity: 0; transform: translateX(-20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    .user-response {
-        animation: slideInRight 0.5s ease-in-out;
-    }
-    @keyframes slideInRight {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
-    }
-    .message-container {
-        text-align: left;
-        width: 100%;
-        max-width: 800px;
-        margin: 0px !important;
-        padding: 0px !important;
-        overflow: hidden;
-    }
-    .pagination-container {
-        min-height: 400px;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-start;
-        align-items: center;
-        padding: 0px !important;
-        margin: 0px !important;
-        overflow: hidden;
-    }
-    .nav-buttons {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: 20px;
-        width: 100%;
-        max-width: 800px;
-    }
-    .nav-button {
-        background-color: #4CAF50;
-        color: white;
-        padding: 10px 20px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 16px;
-        min-width: 120px;
-        text-align: center;
-    }
-    .nav-button:disabled {
-        background-color: #cccccc;
-        cursor: not-allowed;
-    }
+    .typing { font-size: 14px; color: #888; animation: blink 1.5s infinite; }
+    @keyframes blink { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+    .ai-response { animation: slideIn 0.5s ease-in-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+    .user-response { animation: slideInRight 0.5s ease-in-out; }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    .message-container { text-align: left; width: 100%; max-width: 800px; margin: 0px !important; padding: 0px !important; overflow: hidden; }
+    .pagination-container { min-height: 400px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 0px !important; margin: 0px !important; overflow: hidden; }
+    .nav-buttons { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; width: 100%; max-width: 800px; }
+    .nav-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; min-width: 120px; text-align: center; }
+    .nav-button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .stChatMessage { display: none !important; }
-    .sidebar-input-container {
-        background-color: #fff;
-        border: 1px solid #ddd;
-        border-radius: 20px;
-        padding: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-top: 0px !important;
-        margin-bottom: 0px !important;
-    }
-    .input-wrapper {
-        position: relative;
-        flex-grow: 1;
-    }
-    .stTextInput > div > div > input {
-        border: none !important;
-        outline: none !important;
-        padding: 8px 40px 8px 30px !important;
-        font-size: 14px;
-        width: 100%;
-        border-radius: 20px;
-    }
-    .mic-button {
-        background: none;
-        border: none;
-        cursor: pointer;
-        font-size: 16px;
-        color: #555;
-    }
-    .mic-button.listening {
-        color: blue;
-        animation: pulse 1s infinite;
-    }
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.2); }
-        100% { transform: scale(1); }
-    }
-    .submit-button {
-        background: none !important;
-        border: none !important;
-        padding: 0 !important;
-        cursor: pointer !important;
-        font-size: 16px !important;
-        color: #4CAF50 !important;
-    }
+    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
+    .input-wrapper { position: relative; flex-grow: 1; }
+    .stTextInput > div > div > input { border: none !important; outline: none !important; padding: 8px 40px 8px 30px !important; font-size: 14px; width: 100%; border-radius: 20px; }
+    .mic-button { background: none; border: none; cursor: pointer; font-size: 16px; color: #555; }
+    .mic-button.listening { color: blue; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+    .submit-button { background: none !important; border: none !important; padding: 0 !important; cursor: pointer !important; font-size: 16px !important; color: #4CAF50 !important; }
     .stApp { margin: 0px !important; padding: 0px !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -217,13 +111,6 @@ def process_pdf(pdf):
             extracted_text = page.extract_text()
             if extracted_text:
                 text += extracted_text + "\n\n"
-
-        # Temporarily disable OCR and image processing for Streamlit Cloud compatibility
-        # images = convert_from_path(temp_path)
-        # for image in images:
-        #     image_text = extract_text_from_image(image)
-        #     if image_text.strip():
-        #         text += "**Extracted Text from Image:**\n" + image_text + "\n\n"
 
         tables_text = extract_tables_from_pdf(temp_path)
         if tables_text.strip():
@@ -402,6 +289,32 @@ def user_input(user_question, chat_placeholder):
         display_response(response_text, chat_placeholder)
         st.session_state.conversation.append({"role": "ai", "content": response_text})
 
+# Speech Recognition Function
+def get_voice_input():
+    # Check if running on Streamlit Cloud (no microphone access)
+    if "STREAMLIT_CLOUD" in os.environ:  # Streamlit Cloud sets this implicitly
+        st.warning("🎤 Voice input is not supported on Streamlit Cloud. Please use text input.")
+        return None
+    try:
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            st.info("🎤 Listening... Speak clearly!")
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
+            st.info("Processing audio...")
+            text = recognizer.recognize_google(audio)
+            st.success(f"Recognized: {text}")
+            return text
+    except sr.UnknownValueError:
+        st.error("Sorry, I couldn’t understand the audio.")
+        return None
+    except sr.RequestError as e:
+        st.error(f"Speech Recognition API error: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Voice input error: {e}")
+        return None
+
 def main():
     logger.info("App started")
     if "conversation" not in st.session_state:
@@ -412,6 +325,8 @@ def main():
         st.session_state.processed = False
     if "docs" not in st.session_state:
         st.session_state.docs = []
+    if "listening" not in st.session_state:
+        st.session_state.listening = False
 
     chat_placeholder = st.container()
 
@@ -498,12 +413,29 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
+        # Microphone button with cloud check
+        mic_button = st.button(
+            f"🎤 {'Listening...' if st.session_state.listening else 'Voice Input'}",
+            key="mic_button",
+            disabled=st.session_state.listening or "STREAMLIT_CLOUD" in os.environ
+        )
+
     if submit_button and user_question:
         if not any(msg["content"] == user_question for msg in st.session_state.conversation if msg["role"] == "user"):
             st.session_state.conversation.append({"role": "user", "content": user_question})
             user_input(user_question, chat_placeholder)
             st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
             st.rerun()
+    elif mic_button and not st.session_state.listening:
+        st.session_state.listening = True
+        voice_text = get_voice_input()
+        st.session_state.listening = False
+        if voice_text:
+            if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
+                st.session_state.conversation.append({"role": "user", "content": voice_text})
+                user_input(voice_text, chat_placeholder)
+                st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+                st.rerun()
 
     logger.info("Main loop completed")
 
