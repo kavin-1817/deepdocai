@@ -309,9 +309,10 @@ def user_input(user_question, chat_placeholder):
     )
 
     response_text = format_response(response["output_text"])
-    if not any(msg["content"] == response_text for msg in st.session_state.conversation if msg["role"] == "ai"):
-        display_response(response_text, chat_placeholder)
-        st.session_state.conversation.append({"role": "ai", "content": response_text})
+    
+    # Always display the response, even if the question was asked before
+    display_response(response_text, chat_placeholder)
+    st.session_state.conversation.append({"role": "ai", "content": response_text})
 
 # Voice Input (disabled for cloud deployment)
 # def get_voice_input():
@@ -433,29 +434,12 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-        # Microphone button (disabled for cloud)
-        # mic_button = st.button(
-        #     f"🎤 {'Listening...' if st.session_state.listening else 'Voice Input'}",
-        #     key="mic_button",
-        #     disabled=st.session_state.listening
-        # )
-
     if submit_button and user_question:
-        if not any(msg["content"] == user_question for msg in st.session_state.conversation if msg["role"] == "user"):
-            st.session_state.conversation.append({"role": "user", "content": user_question})
-            user_input(user_question, chat_placeholder)
-            st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
-            st.rerun()
-    # elif mic_button and not st.session_state.listening:  # Disabled with voice input
-    #     st.session_state.listening = True
-    #     voice_text = get_voice_input()
-    #     st.session_state.listening = False
-    #     if voice_text:
-    #         if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
-    #             st.session_state.conversation.append({"role": "user", "content": voice_text})
-    #             user_input(voice_text, chat_placeholder)
-    #             st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
-    #             st.rerun()
+        # Always process the question, even if it was asked before
+        st.session_state.conversation.append({"role": "user", "content": user_question})
+        user_input(user_question, chat_placeholder)
+        st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+        st.rerun()
 
     logger.info("Main loop completed")
 
