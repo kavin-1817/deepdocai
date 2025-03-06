@@ -42,23 +42,27 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS (unchanged)
+# Custom CSS with enhanced animations and spacing
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
     .chat-bubble {
         background-color: #DCF8C6; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
-        margin: 0px !important; display: inline-block; font-size: 18px; line-height: 1.4;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out;
+        margin: 10px 0 !important; display: inline-block; font-size: 18px; line-height: 1.4;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out, bounce 0.5s ease-in-out;
     }
     .ai-bubble {
         background-color: #ECECEC; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
-        margin: 0px !important; display: inline-block; font-size: 18px; line-height: 1.6;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out;
+        margin: 10px 0 !important; display: inline-block; font-size: 18px; line-height: 1.6;
+        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out, bounce 0.5s ease-in-out;
     }
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
     }
     .typing { font-size: 14px; color: #888; animation: blink 1.5s infinite; }
     @keyframes blink { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
