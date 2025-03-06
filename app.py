@@ -14,7 +14,6 @@ from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 import google.generativeai as genai
 import logging
-from voice_input import voice_input  # Import the custom voice input component
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -354,17 +353,28 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-        # Voice input using custom component
-        voice_data = voice_input(key="voice_input")
-        if voice_data and not voice_data["error"] and voice_data["text"]:
-            voice_text = voice_data["text"]
-            if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
-                st.session_state.conversation.append({"role": "user", "content": voice_text})
-                user_input(voice_text, chat_placeholder)
-                st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
-                st.rerun()
-        elif voice_data and voice_data["error"]:
-            st.error(voice_data["text"])
+        # Voice input using custom component or fallback
+        try:
+            from voice_input import voice_input
+            voice_data = voice_input(key="voice_input")
+            if voice_data and not voice_data["error"] and voice_data["text"]:
+                voice_text = voice_data["text"]
+                if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
+                    st.session_state.conversation.append({"role": "user", "content": voice_text})
+                    user_input(voice_text, chat_placeholder)
+                    st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+                    st.rerun()
+            elif voice_data and voice_data["error"]:
+                st.error(voice_data["text"])
+        except Exception as e:
+            st.warning("Voice input component failed. Falling back to text input.")
+            voice_text = st.text_input("Speak something...", key="fallback_voice_input")
+            if voice_text:
+                if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
+                    st.session_state.conversation.append({"role": "user", "content": voice_text})
+                    user_input(voice_text, chat_placeholder)
+                    st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+                    st.rerun()
 
     if submit_button and user_question:
         if not any(msg["content"] == user_question for msg in st.session_state.conversation if msg["role"] == "user"):
