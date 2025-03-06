@@ -2,21 +2,19 @@ import streamlit as st
 import os
 import tempfile
 import re
-import time
-import random
 from PyPDF2 import PdfReader
 import pdfplumber
-from docx import Document  # For Word files
-import openpyxl  # For Excel files
+from docx import Document
+import openpyxl
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
-import speech_recognition as sr  # Added for speech recognition
 import google.generativeai as genai
 import logging
+from voice_input import voice_input  # Import the custom voice input component
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +34,7 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS (unchanged)
+# Custom CSS
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
@@ -54,26 +52,11 @@ st.markdown("""
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    .typing { font-size: 14px; color: #888; animation: blink 1.5s infinite; }
-    @keyframes blink { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
-    .ai-response { animation: slideIn 0.5s ease-in-out; }
-    @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-    .user-response { animation: slideInRight 0.5s ease-in-out; }
-    @keyframes slideInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
     .message-container { text-align: left; width: 100%; max-width: 800px; margin: 0px !important; padding: 0px !important; overflow: hidden; }
-    .pagination-container { min-height: 400px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 0px !important; margin: 0px !important; overflow: hidden; }
     .nav-buttons { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; width: 100%; max-width: 800px; }
     .nav-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; min-width: 120px; text-align: center; }
     .nav-button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .stChatMessage { display: none !important; }
-    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
-    .input-wrapper { position: relative; flex-grow: 1; }
-    .stTextInput > div > div > input { border: none !important; outline: none !important; padding: 8px 40px 8px 30px !important; font-size: 14px; width: 100%; border-radius: 20px; }
-    .mic-button { background: none; border: none; cursor: pointer; font-size: 16px; color: #555; }
-    .mic-button.listening { color: blue; animation: pulse 1s infinite; }
-    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-    .submit-button { background: none !important; border: none !important; padding: 0 !important; cursor: pointer !important; font-size: 16px !important; color: #4CAF50 !important; }
-    .stApp { margin: 0px !important; padding: 0px !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -104,14 +87,11 @@ def process_pdf(pdf):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
             temp_file.write(pdf.getbuffer())
             temp_path = temp_file.name
-        logger.info("PDF temp file created: %s", temp_path)
-
         pdf_reader = PdfReader(temp_path)
         for page in pdf_reader.pages:
             extracted_text = page.extract_text()
             if extracted_text:
                 text += extracted_text + "\n\n"
-
         tables_text = extract_tables_from_pdf(temp_path)
         if tables_text.strip():
             text += "**Extracted Tables:**\n" + tables_text + "\n\n"
@@ -269,51 +249,18 @@ def display_response(response_text, chat_placeholder):
 def user_input(user_question, chat_placeholder):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
     new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
-
     with chat_placeholder:
         st.markdown(
             f'<div class="message-container"><div class="chat-bubble user-response">🧑‍💼 You: {user_question}</div></div>',
             unsafe_allow_html=True
         )
-
-    response = chain(
-        {"input_documents": docs, "question": user_question},
-        return_only_outputs=True
-    )
-
+    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
     response_text = format_response(response["output_text"])
     if not any(msg["content"] == response_text for msg in st.session_state.conversation if msg["role"] == "ai"):
         display_response(response_text, chat_placeholder)
         st.session_state.conversation.append({"role": "ai", "content": response_text})
-
-# Speech Recognition Function
-def get_voice_input():
-    # Check if running on Streamlit Cloud (no microphone access)
-    if "STREAMLIT_CLOUD" in os.environ:  # Streamlit Cloud sets this implicitly
-        st.warning("🎤 Voice input is not supported on Streamlit Cloud. Please use text input.")
-        return None
-    try:
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            st.info("🎤 Listening... Speak clearly!")
-            recognizer.adjust_for_ambient_noise(source, duration=1)
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
-            st.info("Processing audio...")
-            text = recognizer.recognize_google(audio)
-            st.success(f"Recognized: {text}")
-            return text
-    except sr.UnknownValueError:
-        st.error("Sorry, I couldn’t understand the audio.")
-        return None
-    except sr.RequestError as e:
-        st.error(f"Speech Recognition API error: {e}")
-        return None
-    except Exception as e:
-        st.error(f"Voice input error: {e}")
-        return None
 
 def main():
     logger.info("App started")
@@ -325,8 +272,6 @@ def main():
         st.session_state.processed = False
     if "docs" not in st.session_state:
         st.session_state.docs = []
-    if "listening" not in st.session_state:
-        st.session_state.listening = False
 
     chat_placeholder = st.container()
 
@@ -360,20 +305,16 @@ def main():
             with chat_placeholder:
                 st.markdown('<div class="nav-buttons">', unsafe_allow_html=True)
                 col1, col2, col3 = st.columns([1, 1, 1])
-                
                 with col1:
                     if st.button("← Previous", key="prev", disabled=current_page == 0, use_container_width=True):
                         st.session_state.current_page = max(0, current_page - 1)
                         st.rerun()
-                
                 with col2:
                     st.markdown(f"<div style='text-align: center;'>Page {current_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
-                
                 with col3:
                     if st.button("Next →", key="next", disabled=current_page == total_pages - 1, use_container_width=True):
                         st.session_state.current_page = min(total_pages - 1, current_page + 1)
                         st.rerun()
-                
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with st.sidebar:
@@ -413,12 +354,17 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-        # Microphone button with cloud check
-        mic_button = st.button(
-            f"🎤 {'Listening...' if st.session_state.listening else 'Voice Input'}",
-            key="mic_button",
-            disabled=st.session_state.listening or "STREAMLIT_CLOUD" in os.environ
-        )
+        # Voice input using custom component
+        voice_data = voice_input(key="voice_input")
+        if voice_data and not voice_data["error"] and voice_data["text"]:
+            voice_text = voice_data["text"]
+            if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
+                st.session_state.conversation.append({"role": "user", "content": voice_text})
+                user_input(voice_text, chat_placeholder)
+                st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+                st.rerun()
+        elif voice_data and voice_data["error"]:
+            st.error(voice_data["text"])
 
     if submit_button and user_question:
         if not any(msg["content"] == user_question for msg in st.session_state.conversation if msg["role"] == "user"):
@@ -426,16 +372,6 @@ def main():
             user_input(user_question, chat_placeholder)
             st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
             st.rerun()
-    elif mic_button and not st.session_state.listening:
-        st.session_state.listening = True
-        voice_text = get_voice_input()
-        st.session_state.listening = False
-        if voice_text:
-            if not any(msg["content"] == voice_text for msg in st.session_state.conversation if msg["role"] == "user"):
-                st.session_state.conversation.append({"role": "user", "content": voice_text})
-                user_input(voice_text, chat_placeholder)
-                st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
-                st.rerun()
 
     logger.info("Main loop completed")
 
