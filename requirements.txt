@@ -9,6 +9,4 @@ langchain-community
 python-dotenv
 google-generativeai
 faiss-cpu
-pdf2image
-pytesseract
 SpeechRecognition
