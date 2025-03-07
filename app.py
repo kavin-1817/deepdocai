@@ -36,7 +36,7 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS (unchanged)
+# Custom CSS with enhanced animations and spacing
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
@@ -70,9 +70,18 @@ st.markdown("""
     .nav-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; min-width: 120px; text-align: center; }
     .nav-button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .stChatMessage { display: none !important; }
-    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 'autorité
+    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
+    .input-wrapper { position: relative; flex-grow: 1; }
+    .stTextInput > div > div > input { border: none !important; outline: none !important; padding: 8px 40px 8px 30px !important; font-size: 14px; width: 100%; border-radius: 20px; }
+    .mic-button { background: none; border: none; cursor: pointer; font-size: 16px; color: #555; }
+    .mic-button.listening { color: blue; animation: pulse 1s infinite; }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+    .submit-button { background: none !important; border: none !important; padding: 0 !important; cursor: pointer !important; font-size: 16px !important; color: #4CAF50 !important; }
+    .stApp { margin: 0px !important; padding: 0px !important; }
+    </style>
+""", unsafe_allow_html=True)
 
-# File Processing Functions (unchanged)
+# File Processing Functions
 def extract_tables_from_pdf(pdf_path):
     tables_text = ""
     try:
@@ -383,7 +392,7 @@ def main():
                             st.session_state[f"processed_{session_id}"] = True
                             st.success("✅ Process Done! Your files have been successfully processed.")
 
-        # Single input form, always rendered once
+        # Single input form
         with st.form(key=f"input_form_{session_id}", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
             with col1:
@@ -396,7 +405,6 @@ def main():
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-        # Handle form submission
         if submit_button and user_question:
             st.session_state[f"conversation_{session_id}"].append({"role": "user", "content": user_question})
             user_input(user_question, chat_placeholder, session_id)
