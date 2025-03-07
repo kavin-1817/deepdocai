@@ -389,7 +389,7 @@ def main():
                         text_chunks = get_text_chunks(raw_text)
                         if get_vector_store(text_chunks, session_id):
                             st.session_state[f"processed_{session_id}"] = True
-                            st.success("✅ Process Done! Your files have been successfully processed.")
+                            st.success("✅ Process Done!")
 
         with st.form(key=f"input_form_{session_id}", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
