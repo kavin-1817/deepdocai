@@ -70,16 +70,7 @@ st.markdown("""
     .nav-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; min-width: 120px; text-align: center; }
     .nav-button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .stChatMessage { display: none !important; }
-    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
-    .input-wrapper { position: relative; flex-grow: 1; }
-    .stTextInput > div > div > input { border: none !important; outline: none !important; padding: 8px 40px 8px 30px !important; font-size: 14px; width: 100%; border-radius: 20px; }
-    .mic-button { background: none; border: none; cursor: pointer; font-size: 16px; color: #555; }
-    .mic-button.listening { color: blue; animation: pulse 1s infinite; }
-    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-    .submit-button { background: none !important; border: none !important; padding: 0 !important; cursor: pointer !important; font-size: 16px !important; color: #4CAF50 !important; }
-    .stApp { margin: 0px !important; padding: 0px !important; }
-    </style>
-""", unsafe_allow_html=True)
+    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 'autorité
 
 # File Processing Functions (unchanged)
 def extract_tables_from_pdf(pdf_path):
@@ -215,7 +206,6 @@ def get_vector_store(text_chunks, session_id):
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-        # Save to a session-specific folder
         session_folder = f"faiss_index_{session_id}"
         os.makedirs(session_folder, exist_ok=True)
         vector_store.save_local(session_folder)
@@ -317,6 +307,7 @@ def main():
 
     chat_placeholder = st.container()
 
+    # Display conversation history
     if st.session_state[f"conversation_{session_id}"]:
         message_pairs = []
         for i in range(0, len(st.session_state[f"conversation_{session_id}"]), 2):
@@ -363,6 +354,7 @@ def main():
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
+    # Sidebar with file uploader and input form
     with st.sidebar:
         st.title("🚀 DeepDocAI")
         st.subheader("📂 Upload Documents:")
@@ -389,8 +381,9 @@ def main():
                         text_chunks = get_text_chunks(raw_text)
                         if get_vector_store(text_chunks, session_id):
                             st.session_state[f"processed_{session_id}"] = True
-                            st.success("✅ Process Done!")
+                            st.success("✅ Process Done! Your files have been successfully processed.")
 
+        # Single input form, always rendered once
         with st.form(key=f"input_form_{session_id}", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
             with col1:
@@ -398,16 +391,17 @@ def main():
                     "Ask a question...",
                     placeholder="Type your question here...",
                     label_visibility="collapsed",
-                    value=""
+                    key=f"question_input_{session_id}"
                 )
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
-    if submit_button and user_question:
-        st.session_state[f"conversation_{session_id}"].append({"role": "user", "content": user_question})
-        user_input(user_question, chat_placeholder, session_id)
-        st.session_state[f"current_page_{session_id}"] = (len(st.session_state[f"conversation_{session_id}"]) // 2) - 1
-        st.rerun()
+        # Handle form submission
+        if submit_button and user_question:
+            st.session_state[f"conversation_{session_id}"].append({"role": "user", "content": user_question})
+            user_input(user_question, chat_placeholder, session_id)
+            st.session_state[f"current_page_{session_id}"] = (len(st.session_state[f"conversation_{session_id}"]) // 2) - 1
+            st.rerun()
 
     logger.info(f"Main loop completed for session {session_id}")
 
