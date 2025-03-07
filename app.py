@@ -16,7 +16,6 @@ from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 import google.generativeai as genai
 import logging
-import uuid  # For generating unique session IDs
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -36,27 +35,173 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS with enhanced animations and spacing
+# Custom CSS with updated button effects
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
+    
+    /* User Chat Bubble */
     .chat-bubble {
-        background-color: #DCF8C6; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
-        margin: 10px 0 !important; display: inline-block; font-size: 18px; line-height: 1.4;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out, bounce 0.5s ease-in-out;
+        background: linear-gradient(135deg, #9CA3AF 0%, #4B5563 100%);
+        color: white;
+        padding: 14px 20px;
+        border-radius: 20px 20px 20px 5px;
+        max-width: 80%;
+        margin: 12px 0 !important;
+        display: inline-block;
+        font-size: 18px;
+        line-height: 1.5;
+        position: relative;
+        box-shadow: 3px 3px 15px rgba(0, 0, 0, 0.2), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+        animation: fadeIn 0.5s ease-in-out, float 0.5s ease-in-out;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+    .chat-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        right: 10px;
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-top: 10px solid #4B5563;
+        transform: rotate(-20deg);
+    }
+    .chat-bubble:hover {
+        transform: translateY(-3px);
+        box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.25);
+    }
+    
+    /* AI Chat Bubble */
     .ai-bubble {
-        background-color: #ECECEC; color: black; padding: 12px; border-radius: 12px; max-width: 80%;
-        margin: 10px 0 !important; display: inline-block; font-size: 18px; line-height: 1.6;
-        box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1); animation: fadeIn 0.5s ease-in-out, bounce 0.5s ease-in-out;
+        background: linear-gradient(135deg, #A3BFFA 0%, #4B5EAA 100%);
+        color: white;
+        padding: 14px 20px;
+        border-radius: 20px 20px 5px 20px;
+        max-width: 80%;
+        margin: 12px 0 !important;
+        display: inline-block;
+        font-size: 18px;
+        line-height: 1.6;
+        position: relative;
+        box-shadow: 3px 3px 15px rgba(0, 0, 0, 0.2), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+        animation: fadeIn 0.5s ease-in-out, float 0.5s ease-in-out;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+    .ai-bubble::after {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 10px;
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-top: 10px solid #4B5EAA;
+        transform: rotate(20deg);
+    }
+    .ai-bubble:hover {
+        transform: translateY(-3px);
+        box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.25);
+    }
+    
+    /* Bold Text Styling */
+    strong {
+        font-weight: 700;
+        text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Sidebar Styling */
+    .css-1v0mbdj, .css-1v3fvcr {
+        background: linear-gradient(180deg, #9CA3AF 0%, #A3BFFA 100%);
+        color: #1F2937;
+        padding: 20px;
+    }
+    .css-1v0mbdj h1, .css-1v3fvcr h1, .css-1v0mbdj h2, .css-1v3fvcr h2 {
+        color: #1F2937;
+    }
+    .stButton > button {
+        background-color: #4B5EAA;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        padding: 10px 20px;
+        font-size: 16px;
+        transition: background-color 0.2s ease;
+    }
+    .stButton > button:hover {
+        background-color: #4B5563;
+    }
+    .stTextInput > div > div > input {
+        background-color: #FFFFFF;
+        color: #1F2937;
+        border: 1px solid #4B5563;
+        border-radius: 20px;
+        padding: 8px 40px 8px 10px !important;
+    }
+    .submit-button {
+        color: #4B5EAA !important;
+    }
+    .submit-button:hover {
+        color: #4B5563 !important;
+    }
+    .mic-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        color: #4B5563;
+    }
+    .mic-button.listening {
+        color: #4B5EAA;
+        animation: pulse 1s infinite;
+    }
+    
+    /* Navigation Buttons Styling */
+    .nav-buttons .stButton > button { /* Previous and Next buttons */
+        background: linear-gradient(135deg, #9CA3AF 0%, #4B5563 100%);
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 15px;
+        font-size: 16px;
+        min-width: 120px;
+        box-shadow: 3px 3px 15px rgba(0, 0, 0, 0.2), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .nav-buttons .stButton > button:hover:not(:disabled) {
+        transform: translateY(-3px);
+        box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.25);
+    }
+    .nav-buttons .stButton > button:disabled {
+        background: #D1D5DB;
+        color: #6B7280;
+        box-shadow: none;
+        cursor: not-allowed;
+    }
+    .nav-buttons div { /* Page indicator */
+        background: linear-gradient(135deg, #A3BFFA 0%, #4B5EAA 100%);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 15px;
+        font-size: 16px;
+        box-shadow: 3px 3px 15px rgba(0, 0, 0, 0.2), inset 0 2px 5px rgba(255, 255, 255, 0.3);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .nav-buttons div:hover {
+        transform: translateY(-3px);
+        box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.25);
+    }
+    
+    /* Animations */
     @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(10px); }
+        from { opacity: 0; transform: translateY(15px); }
         to { opacity: 1; transform: translateY(0); }
     }
-    @keyframes bounce {
+    @keyframes float {
         0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
+        50% { transform: translateY(-5px); }
     }
     .typing { font-size: 14px; color: #888; animation: blink 1.5s infinite; }
     @keyframes blink { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
@@ -67,16 +212,11 @@ st.markdown("""
     .message-container { text-align: left; width: 100%; max-width: 800px; margin: 0px !important; padding: 0px !important; overflow: hidden; }
     .pagination-container { min-height: 400px; display: flex; flex-direction: column; justify-content: flex-start; align-items: center; padding: 0px !important; margin: 0px !important; overflow: hidden; }
     .nav-buttons { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; width: 100%; max-width: 800px; }
-    .nav-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; min-width: 120px; text-align: center; }
-    .nav-button:disabled { background-color: #cccccc; cursor: not-allowed; }
     .stChatMessage { display: none !important; }
-    .sidebar-input-container { background-color: #fff; border: 1px solid #ddd; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
+    .sidebar-input-container { background-color: #fff; border: 1px solid #4B5563; border-radius: 20px; padding: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; margin-top: 0px !important; margin-bottom: 0px !important; }
     .input-wrapper { position: relative; flex-grow: 1; }
-    .stTextInput > div > div > input { border: none !important; outline: none !important; padding: 8px 40px 8px 30px !important; font-size: 14px; width: 100%; border-radius: 20px; }
-    .mic-button { background: none; border: none; cursor: pointer; font-size: 16px; color: #555; }
-    .mic-button.listening { color: blue; animation: pulse 1s infinite; }
+    .stTextInput > div > div > input { border-radius: 20px; }
     @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
-    .submit-button { background: none !important; border: none !important; padding: 0 !important; cursor: pointer !important; font-size: 16px !important; color: #4CAF50 !important; }
     .stApp { margin: 0px !important; padding: 0px !important; }
     </style>
 """, unsafe_allow_html=True)
@@ -207,7 +347,7 @@ def get_text_chunks(text):
         st.error(f"Error splitting text: {str(e)}")
         return []
 
-def get_vector_store(text_chunks, session_id):
+def get_vector_store(text_chunks):
     if not text_chunks:
         logger.error("No text found in the uploaded files")
         st.error("❌ No text found in the uploaded files.")
@@ -215,10 +355,8 @@ def get_vector_store(text_chunks, session_id):
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-        session_folder = f"faiss_index_{session_id}"
-        os.makedirs(session_folder, exist_ok=True)
-        vector_store.save_local(session_folder)
-        logger.info(f"Vector store created successfully for session {session_id}")
+        vector_store.save_local("faiss_index")
+        logger.info("Vector store created successfully")
         return True
     except Exception as e:
         logger.error(f"Error in vector storage: {str(e)}")
@@ -272,10 +410,9 @@ def display_response(response_text, chat_placeholder):
             unsafe_allow_html=True
         )
 
-def user_input(user_question, chat_placeholder, session_id):
+def user_input(user_question, chat_placeholder):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    session_folder = f"faiss_index_{session_id}"
-    new_db = FAISS.load_local(session_folder, embeddings, allow_dangerous_deserialization=True)
+    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
@@ -294,39 +431,31 @@ def user_input(user_question, chat_placeholder, session_id):
     response_text = format_response(response["output_text"])
     
     display_response(response_text, chat_placeholder)
-    st.session_state[f"conversation_{session_id}"].append({"role": "ai", "content": response_text})
+    st.session_state.conversation.append({"role": "ai", "content": response_text})
 
 def main():
     logger.info("App started")
-    
-    # Generate or retrieve a unique session ID for this user
-    if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())
-    session_id = st.session_state.session_id
-
-    # Initialize session-specific state
-    if f"conversation_{session_id}" not in st.session_state:
-        st.session_state[f"conversation_{session_id}"] = []
-    if f"current_page_{session_id}" not in st.session_state:
-        st.session_state[f"current_page_{session_id}"] = 0
-    if f"processed_{session_id}" not in st.session_state:
-        st.session_state[f"processed_{session_id}"] = False
-    if f"docs_{session_id}" not in st.session_state:
-        st.session_state[f"docs_{session_id}"] = []
+    if "conversation" not in st.session_state:
+        st.session_state.conversation = []
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = 0
+    if "processed" not in st.session_state:
+        st.session_state.processed = False
+    if "docs" not in st.session_state:
+        st.session_state.docs = []
 
     chat_placeholder = st.container()
 
-    # Display conversation history
-    if st.session_state[f"conversation_{session_id}"]:
+    if st.session_state.conversation:
         message_pairs = []
-        for i in range(0, len(st.session_state[f"conversation_{session_id}"]), 2):
-            pair = [st.session_state[f"conversation_{session_id}"][i]]
-            if i + 1 < len(st.session_state[f"conversation_{session_id}"]):
-                pair.append(st.session_state[f"conversation_{session_id}"][i + 1])
+        for i in range(0, len(st.session_state.conversation), 2):
+            pair = [st.session_state.conversation[i]]
+            if i + 1 < len(st.session_state.conversation):
+                pair.append(st.session_state.conversation[i + 1])
             message_pairs.append(pair)
         
         total_pages = len(message_pairs)
-        current_page = st.session_state[f"current_page_{session_id}"]
+        current_page = st.session_state.current_page
         
         if total_pages > 0:
             with chat_placeholder:
@@ -349,21 +478,20 @@ def main():
                 col1, col2, col3 = st.columns([1, 1, 1])
                 
                 with col1:
-                    if st.button("← Previous", key=f"prev_{session_id}", disabled=current_page == 0, use_container_width=True):
-                        st.session_state[f"current_page_{session_id}"] = max(0, current_page - 1)
+                    if st.button("← Previous", key="prev", disabled=current_page == 0, use_container_width=True):
+                        st.session_state.current_page = max(0, current_page - 1)
                         st.rerun()
                 
                 with col2:
                     st.markdown(f"<div style='text-align: center;'>Page {current_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
                 
                 with col3:
-                    if st.button("Next →", key=f"next_{session_id}", disabled=current_page == total_pages - 1, use_container_width=True):
-                        st.session_state[f"current_page_{session_id}"] = min(total_pages - 1, current_page + 1)
+                    if st.button("Next →", key="next", disabled=current_page == total_pages - 1, use_container_width=True):
+                        st.session_state.current_page = min(total_pages - 1, current_page + 1)
                         st.rerun()
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # Sidebar with file uploader and input form
     with st.sidebar:
         st.title("🚀 DeepDocAI")
         st.subheader("📂 Upload Documents:")
@@ -371,45 +499,43 @@ def main():
             "Upload PDFs, Word (.docx), or Excel (.xlsx) files and Click on Submit",
             accept_multiple_files=True,
             type=['pdf', 'docx', 'xlsx'],
-            key=f"file_uploader_{session_id}"
+            key="file_uploader"
         )
         
-        if st.button("📥 Submit & Process", key=f"submit_button_{session_id}"):
-            logger.info(f"Submit button clicked for session {session_id}")
+        if st.button("📥 Submit & Process", key="submit_button"):
+            logger.info("Submit button clicked")
             if not docs:
                 st.warning("⚠️ Please upload at least one file")
             else:
-                st.session_state[f"docs_{session_id}"] = docs
-                logger.info(f"Processing files for session {session_id}")
-                with st.spinner("Processing your files... Please wait."):
-                    raw_text = get_file_text(docs)
-                    if not raw_text.strip():
-                        st.error("❌ Failed to extract text from files.")
-                    else:
-                        text_chunks = get_text_chunks(raw_text)
-                        if get_vector_store(text_chunks, session_id):
-                            st.session_state[f"processed_{session_id}"] = True
-                            st.success("✅ Process Done! Your files have been successfully processed.")
+                st.session_state.docs = docs
+                logger.info("Processing files")
+                raw_text = get_file_text(docs)
+                if not raw_text.strip():
+                    st.error("❌ Failed to extract text from files.")
+                else:
+                    text_chunks = get_text_chunks(raw_text)
+                    if get_vector_store(text_chunks):
+                        st.session_state.processed = True
 
-        with st.form(key=f"input_form_{session_id}", clear_on_submit=True):
+        with st.form(key="input_form", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
             with col1:
                 user_question = st.text_input(
                     "Ask a question...",
                     placeholder="Type your question here...",
                     label_visibility="collapsed",
-                    key=f"question_input_{session_id}"
+                    value=""
                 )
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
     if submit_button and user_question:
-        st.session_state[f"conversation_{session_id}"].append({"role": "user", "content": user_question})
-        user_input(user_question, chat_placeholder, session_id)
-        st.session_state[f"current_page_{session_id}"] = (len(st.session_state[f"conversation_{session_id}"]) // 2) - 1
+        st.session_state.conversation.append({"role": "user", "content": user_question})
+        user_input(user_question, chat_placeholder)
+        st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
         st.rerun()
 
-    logger.info(f"Main loop completed for session {session_id}")
+    logger.info("Main loop completed")
 
 if __name__ == "__main__":
     main()
