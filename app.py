@@ -14,19 +14,13 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains.question_answering import load_qa_chain
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
-# import pdf2image  # Commented out for Streamlit Cloud
-# import pytesseract  # Commented out for Streamlit Cloud
-# import speech_recognition as sr  # Commented out for Streamlit Cloud
 import google.generativeai as genai
 import logging
+import uuid  # For generating unique session IDs
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# Tesseract path configuration (disabled for cloud deployment)
-# if os.name == 'nt':
-#     pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\tesseract\tesseract.exe'
 
 # Set up Streamlit page
 st.set_page_config(page_title="DeepDocAI", page_icon="🤖", layout="wide")
@@ -88,13 +82,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # File Processing Functions
-# def extract_text_from_image(image):  # Disabled for cloud
-#     try:
-#         return pytesseract.image_to_string(image, lang='tam')
-#     except Exception as e:
-#         st.error(f"Error in OCR: {str(e)}")
-#         return ""
-
 def extract_tables_from_pdf(pdf_path):
     tables_text = ""
     try:
@@ -128,13 +115,6 @@ def process_pdf(pdf):
             extracted_text = page.extract_text()
             if extracted_text:
                 text += extracted_text + "\n\n"
-
-        # Disabled for cloud deployment
-        # images = convert_from_path(temp_path)
-        # for image in images:
-        #     image_text = extract_text_from_image(image)
-        #     if image_text.strip():
-        #         text += "**Extracted Text from Image:**\n" + image_text + "\n\n"
 
         tables_text = extract_tables_from_pdf(temp_path)
         if tables_text.strip():
@@ -227,7 +207,7 @@ def get_text_chunks(text):
         st.error(f"Error splitting text: {str(e)}")
         return []
 
-def get_vector_store(text_chunks):
+def get_vector_store(text_chunks, session_id):
     if not text_chunks:
         logger.error("No text found in the uploaded files")
         st.error("❌ No text found in the uploaded files.")
@@ -235,8 +215,10 @@ def get_vector_store(text_chunks):
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-        vector_store.save_local("faiss_index")
-        logger.info("Vector store created successfully")
+        session_folder = f"faiss_index_{session_id}"
+        os.makedirs(session_folder, exist_ok=True)
+        vector_store.save_local(session_folder)
+        logger.info(f"Vector store created successfully for session {session_id}")
         return True
     except Exception as e:
         logger.error(f"Error in vector storage: {str(e)}")
@@ -290,9 +272,10 @@ def display_response(response_text, chat_placeholder):
             unsafe_allow_html=True
         )
 
-def user_input(user_question, chat_placeholder):
+def user_input(user_question, chat_placeholder, session_id):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    session_folder = f"faiss_index_{session_id}"
+    new_db = FAISS.load_local(session_folder, embeddings, allow_dangerous_deserialization=True)
 
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
@@ -310,57 +293,40 @@ def user_input(user_question, chat_placeholder):
 
     response_text = format_response(response["output_text"])
     
-    # Always display the response, even if the question was asked before
     display_response(response_text, chat_placeholder)
-    st.session_state.conversation.append({"role": "ai", "content": response_text})
-
-# Voice Input (disabled for cloud deployment)
-# def get_voice_input():
-#     try:
-#         recognizer = sr.Recognizer()
-#         with sr.Microphone() as source:
-#             st.info("🎤 Listening... Speak clearly!")
-#             recognizer.adjust_for_ambient_noise(source, duration=1)
-#             audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
-#             st.info("Processing audio...")
-#             text = recognizer.recognize_google(audio)
-#             st.success(f"Recognized: {text}")
-#             return text
-#     except sr.UnknownValueError:
-#         st.error("Sorry, I couldn’t understand the audio.")
-#         return None
-#     except sr.RequestError as e:
-#         st.error(f"Speech Recognition API error: {e}")
-#         return None
-#     except Exception as e:
-#         st.error(f"Voice input error: {e}")
-#         return None
+    st.session_state[f"conversation_{session_id}"].append({"role": "ai", "content": response_text})
 
 def main():
     logger.info("App started")
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = []
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = 0
-    if "processed" not in st.session_state:
-        st.session_state.processed = False
-    if "docs" not in st.session_state:
-        st.session_state.docs = []
-    # if "listening" not in st.session_state:  # Disabled with voice input
-    #     st.session_state.listening = False
+    
+    # Generate or retrieve a unique session ID for this user
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())
+    session_id = st.session_state.session_id
+
+    # Initialize session-specific state
+    if f"conversation_{session_id}" not in st.session_state:
+        st.session_state[f"conversation_{session_id}"] = []
+    if f"current_page_{session_id}" not in st.session_state:
+        st.session_state[f"current_page_{session_id}"] = 0
+    if f"processed_{session_id}" not in st.session_state:
+        st.session_state[f"processed_{session_id}"] = False
+    if f"docs_{session_id}" not in st.session_state:
+        st.session_state[f"docs_{session_id}"] = []
 
     chat_placeholder = st.container()
 
-    if st.session_state.conversation:
+    # Display conversation history
+    if st.session_state[f"conversation_{session_id}"]:
         message_pairs = []
-        for i in range(0, len(st.session_state.conversation), 2):
-            pair = [st.session_state.conversation[i]]
-            if i + 1 < len(st.session_state.conversation):
-                pair.append(st.session_state.conversation[i + 1])
+        for i in range(0, len(st.session_state[f"conversation_{session_id}"]), 2):
+            pair = [st.session_state[f"conversation_{session_id}"][i]]
+            if i + 1 < len(st.session_state[f"conversation_{session_id}"]):
+                pair.append(st.session_state[f"conversation_{session_id}"][i + 1])
             message_pairs.append(pair)
         
         total_pages = len(message_pairs)
-        current_page = st.session_state.current_page
+        current_page = st.session_state[f"current_page_{session_id}"]
         
         if total_pages > 0:
             with chat_placeholder:
@@ -383,20 +349,21 @@ def main():
                 col1, col2, col3 = st.columns([1, 1, 1])
                 
                 with col1:
-                    if st.button("← Previous", key="prev", disabled=current_page == 0, use_container_width=True):
-                        st.session_state.current_page = max(0, current_page - 1)
+                    if st.button("← Previous", key=f"prev_{session_id}", disabled=current_page == 0, use_container_width=True):
+                        st.session_state[f"current_page_{session_id}"] = max(0, current_page - 1)
                         st.rerun()
                 
                 with col2:
                     st.markdown(f"<div style='text-align: center;'>Page {current_page + 1} of {total_pages}</div>", unsafe_allow_html=True)
                 
                 with col3:
-                    if st.button("Next →", key="next", disabled=current_page == total_pages - 1, use_container_width=True):
-                        st.session_state.current_page = min(total_pages - 1, current_page + 1)
+                    if st.button("Next →", key=f"next_{session_id}", disabled=current_page == total_pages - 1, use_container_width=True):
+                        st.session_state[f"current_page_{session_id}"] = min(total_pages - 1, current_page + 1)
                         st.rerun()
                 
                 st.markdown('</div>', unsafe_allow_html=True)
 
+    # Sidebar with file uploader and input form
     with st.sidebar:
         st.title("🚀 DeepDocAI")
         st.subheader("📂 Upload Documents:")
@@ -404,44 +371,45 @@ def main():
             "Upload PDFs, Word (.docx), or Excel (.xlsx) files and Click on Submit",
             accept_multiple_files=True,
             type=['pdf', 'docx', 'xlsx'],
-            key="file_uploader"
+            key=f"file_uploader_{session_id}"
         )
         
-        if st.button("📥 Submit & Process", key="submit_button"):
-            logger.info("Submit button clicked")
+        if st.button("📥 Submit & Process", key=f"submit_button_{session_id}"):
+            logger.info(f"Submit button clicked for session {session_id}")
             if not docs:
                 st.warning("⚠️ Please upload at least one file")
             else:
-                st.session_state.docs = docs
-                logger.info("Processing files")
-                raw_text = get_file_text(docs)
-                if not raw_text.strip():
-                    st.error("❌ Failed to extract text from files.")
-                else:
-                    text_chunks = get_text_chunks(raw_text)
-                    if get_vector_store(text_chunks):
-                        st.session_state.processed = True
+                st.session_state[f"docs_{session_id}"] = docs
+                logger.info(f"Processing files for session {session_id}")
+                with st.spinner("Processing your files... Please wait."):
+                    raw_text = get_file_text(docs)
+                    if not raw_text.strip():
+                        st.error("❌ Failed to extract text from files.")
+                    else:
+                        text_chunks = get_text_chunks(raw_text)
+                        if get_vector_store(text_chunks, session_id):
+                            st.session_state[f"processed_{session_id}"] = True
+                            st.success("✅ Process Done! Your files have been successfully processed.")
 
-        with st.form(key="input_form", clear_on_submit=True):
+        with st.form(key=f"input_form_{session_id}", clear_on_submit=True):
             col1, col2 = st.columns([12, 1])
             with col1:
                 user_question = st.text_input(
                     "Ask a question...",
                     placeholder="Type your question here...",
                     label_visibility="collapsed",
-                    value=""
+                    key=f"question_input_{session_id}"
                 )
             with col2:
                 submit_button = st.form_submit_button("➤", use_container_width=False)
 
     if submit_button and user_question:
-        # Always process the question, even if it was asked before
-        st.session_state.conversation.append({"role": "user", "content": user_question})
-        user_input(user_question, chat_placeholder)
-        st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
+        st.session_state[f"conversation_{session_id}"].append({"role": "user", "content": user_question})
+        user_input(user_question, chat_placeholder, session_id)
+        st.session_state[f"current_page_{session_id}"] = (len(st.session_state[f"conversation_{session_id}"]) // 2) - 1
         st.rerun()
 
-    logger.info("Main loop completed")
+    logger.info(f"Main loop completed for session {session_id}")
 
 if __name__ == "__main__":
     main()
