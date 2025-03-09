@@ -134,12 +134,12 @@ st.markdown("""
         background-color: #4B5563;
     }
     .stTextInput > div > div > input {
-        background-color: #FFFFFF;
-        color: #1F2937;
-        border: 1px solid #4B5563;
-        border-radius: 20px;
-        padding: 8px 40px 8px 10px !important;
-    }
+    background-color: transparent;
+    color: inherit; /* Uses the parent element's text color */
+    border: none; /* Removes the border entirely */
+    border-radius: 20px;
+    padding: 8px 40px 8px 10px !important;
+}
     .submit-button {
         color: #4B5EAA !important;
     }
