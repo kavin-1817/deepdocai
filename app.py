@@ -4,6 +4,7 @@ import tempfile
 import re
 import time
 import random
+import uuid  # Added for generating unique session IDs
 from PyPDF2 import PdfReader
 import pdfplumber
 from docx import Document  # For Word files
@@ -35,7 +36,7 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS with updated button effects
+# Custom CSS with updated button effects (unchanged from original)
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
@@ -221,7 +222,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# File Processing Functions
+# File Processing Functions (unchanged)
 def extract_tables_from_pdf(pdf_path):
     tables_text = ""
     try:
@@ -347,7 +348,7 @@ def get_text_chunks(text):
         st.error(f"Error splitting text: {str(e)}")
         return []
 
-def get_vector_store(text_chunks):
+def get_vector_store(text_chunks, session_id):
     if not text_chunks:
         logger.error("No text found in the uploaded files")
         st.error("❌ No text found in the uploaded files.")
@@ -355,8 +356,12 @@ def get_vector_store(text_chunks):
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-        vector_store.save_local("faiss_index")
-        logger.info("Vector store created successfully")
+        # Save vector store in a session-specific directory
+        index_dir = f"faiss_index_{session_id}"
+        if not os.path.exists(index_dir):
+            os.makedirs(index_dir)
+        vector_store.save_local(index_dir)
+        logger.info("Vector store created successfully for session: %s", session_id)
         return True
     except Exception as e:
         logger.error(f"Error in vector storage: {str(e)}")
@@ -410,9 +415,13 @@ def display_response(response_text, chat_placeholder):
             unsafe_allow_html=True
         )
 
-def user_input(user_question, chat_placeholder):
+def user_input(user_question, chat_placeholder, session_id):
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    index_dir = f"faiss_index_{session_id}"
+    if not os.path.exists(index_dir):
+        st.error("No documents have been uploaded in this session.")
+        return
+    new_db = FAISS.load_local(index_dir, embeddings, allow_dangerous_deserialization=True)
 
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
@@ -435,6 +444,10 @@ def user_input(user_question, chat_placeholder):
 
 def main():
     logger.info("App started")
+    
+    # Initialize session state variables
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = str(uuid.uuid4())  # Generate unique session ID
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
     if "current_page" not in st.session_state:
@@ -514,7 +527,7 @@ def main():
                     st.error("❌ Failed to extract text from files.")
                 else:
                     text_chunks = get_text_chunks(raw_text)
-                    if get_vector_store(text_chunks):
+                    if get_vector_store(text_chunks, st.session_state.session_id):
                         st.session_state.processed = True
 
         with st.form(key="input_form", clear_on_submit=True):
@@ -531,7 +544,7 @@ def main():
 
     if submit_button and user_question:
         st.session_state.conversation.append({"role": "user", "content": user_question})
-        user_input(user_question, chat_placeholder)
+        user_input(user_question, chat_placeholder, st.session_state.session_id)
         st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
         st.rerun()
 
