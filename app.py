@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Set up Streamlit page
-st.set_page_config(page_title="DeepDocAI", page_icon="ai2.png", layout="wide")
+st.set_page_config(page_title="DeepDocAI", page_icon="📜", layout="wide")
 
 # Load environment variables
 try:
