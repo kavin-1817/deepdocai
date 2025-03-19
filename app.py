@@ -4,11 +4,11 @@ import tempfile
 import re
 import time
 import random
-import uuid  # Added for generating unique session IDs
+import uuid
 from PyPDF2 import PdfReader
 import pdfplumber
-from docx import Document  # For Word files
-import openpyxl  # For Excel files
+from docx import Document
+import openpyxl
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 from langchain_community.vectorstores import FAISS
@@ -36,7 +36,7 @@ except Exception as e:
     logger.error(f"Error configuring Google API: {str(e)}")
     st.error(f"Error configuring Google API: {str(e)}")
 
-# Custom CSS with updated button effects (unchanged from original)
+# Custom CSS (unchanged)
 st.markdown("""
     <style>
     h1, .stHeader { border-bottom: none !important; }
@@ -356,7 +356,6 @@ def get_vector_store(text_chunks, session_id):
     try:
         embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
         vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-        # Save vector store in a session-specific directory
         index_dir = f"faiss_index_{session_id}"
         if not os.path.exists(index_dir):
             os.makedirs(index_dir)
@@ -445,9 +444,8 @@ def user_input(user_question, chat_placeholder, session_id):
 def main():
     logger.info("App started")
     
-    # Initialize session state variables
     if "session_id" not in st.session_state:
-        st.session_state.session_id = str(uuid.uuid4())  # Generate unique session ID
+        st.session_state.session_id = str(uuid.uuid4())
     if "conversation" not in st.session_state:
         st.session_state.conversation = []
     if "current_page" not in st.session_state:
@@ -544,7 +542,21 @@ def main():
 
     if submit_button and user_question:
         st.session_state.conversation.append({"role": "user", "content": user_question})
-        user_input(user_question, chat_placeholder, st.session_state.session_id)
+        index_dir = f"faiss_index_{st.session_state.session_id}"
+        if not os.path.exists(index_dir):
+            # Display user question and friendly error message
+            with chat_placeholder:
+                st.markdown(
+                    f'<div class="message-container"><div class="chat-bubble user-response">🧑‍💼 You: {user_question}</div></div>',
+                    unsafe_allow_html=True
+                )
+                st.markdown(
+                    '<div class="message-container"><div class="ai-bubble ai-response">Oops! 😅 It looks like you haven’t uploaded any files yet. Please upload a document in the sidebar and click "Submit & Process" so I can assist you!</div></div>',
+                    unsafe_allow_html=True
+                )
+            st.session_state.conversation.append({"role": "ai", "content": "Oops! 😅 It looks like you haven’t uploaded any files yet. Please upload a document in the sidebar and click 'Submit & Process' so I can assist you!"})
+        else:
+            user_input(user_question, chat_placeholder, st.session_state.session_id)
         st.session_state.current_page = (len(st.session_state.conversation) // 2) - 1
         st.rerun()
 
